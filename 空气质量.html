@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>城市空气质量数据可视化大屏</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#00BFFF', // 亮蓝色作为主色调
+                        secondary: '#1E90FF', // 道奇蓝作为辅助色
+                        accent: '#00CED1', // 暗青色作为强调色
+                        danger: '#FF6347', // 番茄红保持警示作用
+                        success: '#32CD32', // lime绿色保持成功状态
+                        dark: '#0A192F', // 深蓝黑色作为基础背景
+                        darker: '#05101F', // 更深的蓝色作为页面背景
+                        panel: 'rgba(10, 25, 47, 0.7)', // 面板背景色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 15px rgba(0, 191, 255, 0.3)', // 蓝色光晕
+                        'panel': '0 4px 20px rgba(0, 30, 60, 0.5)', // 蓝色调阴影
+                    }
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .bg-grid {
+                background-image: 
+                    linear-gradient(rgba(0, 191, 255, 0.08) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0, 191, 255, 0.08) 1px, transparent 1px);
+                background-size: 20px 20px;
+            }
+            .border-glow {
+                box-shadow: 0 0 5px rgba(0, 191, 255, 0.6);
+            }
+            .text-gradient {
+                background-clip: text;
+                -webkit-background-clip: text;
+                color: transparent;
+                background-image: linear-gradient(90deg, #00BFFF, #1E90FF);
+            }
+            .panel-header {
+                border-bottom: 1px solid rgba(0, 191, 255, 0.3);
+                padding: 0.75rem 1rem !important; /* 缩小面板标题 padding */
+            }
+            .panel-header h2 {
+                font-size: 0.875rem !important; /* 缩小面板标题字体 */
+            }
+            .panel-header i {
+                font-size: 0.875rem !important; /* 缩小面板标题图标 */
+            }
+            .stat-card {
+                background: linear-gradient(145deg, rgba(20, 45, 80, 0.6), rgba(10, 25, 47, 0.9));
+                border: 1px solid rgba(0, 191, 255, 0.2);
+                transition: all 0.3s ease;
+            }
+            .stat-card:hover {
+                border-color: rgba(0, 191, 255, 0.5);
+                transform: translateY(-2px);
+                box-shadow: 0 0 15px rgba(0, 191, 255, 0.3);
+            }
+            .progress-shine {
+                position: relative;
+                overflow: hidden;
+            }
+            .progress-shine::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 50%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+                animation: shine 2s infinite;
+            }
+            @keyframes shine {
+                100% {
+                    left: 100%;
+                }
+            }
+            .number-animation {
+                animation: numberChange 2s ease-out forwards;
+            }
+            @keyframes numberChange {
+                0% {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                100% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            /* 缩小图表提示文字 */
+            .chart-hint {
+                font-size: 0.75rem !important;
+                padding: 0.25rem 1rem !important;
+                margin: 0.25rem 0 !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-darker text-gray-100 min-h-screen overflow-x-hidden bg-grid">
+    <!-- 顶部标题栏 -->
+    <header class="bg-dark/80 backdrop-blur-md border-b border-primary/40 py-3 px-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fa fa-bar-chart text-primary text-xl"></i>
+                <h1 class="text-[clamp(1rem,2vw,1.25rem)] font-bold text-gradient">城市空气质量分析数据大屏</h1>
+            </div>
+            <div class="flex gap-4 text-gray-300 text-sm">
+                <div><span id="current-date" class="font-medium">2024-2025年</span></div>
+                <div><span id="update-time" class="font-medium">数据更新中...</span></div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- 主要内容区 -->
+    <div class="container mx-auto p-3 md:p-4">
+        <!-- 顶部数据概览卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <!-- 监测城市数量 -->
+            <div class="stat-card rounded-lg p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                    <i class="fa fa-map-marker text-base"></i>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">监测城市数量</div>
+                    <div class="text-xl font-bold number-animation">3个</div>
+                </div>
+            </div>
+            
+            <!-- 平均AQI值 -->
+            <div class="stat-card rounded-lg p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-secondary">
+                    <i class="fa fa-line-chart text-base"></i>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">三城市平均AQI</div>
+                    <div class="text-xl font-bold number-animation">58.93</div>
+                </div>
+            </div>
+            
+            <!-- PM2.5超标总天数 -->
+            <div class="stat-card rounded-lg p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
+                    <i class="fa fa-exclamation-triangle text-base"></i>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">PM2.5超标总天数</div>
+                    <div class="text-xl font-bold number-animation">1038天</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 主要网格布局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <!-- 左侧面板 -->
+            <div class="lg:col-span-3 space-y-4">
+                <!-- AQI平均值柱状图 - 缩小高度 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[180px]">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-tachometer text-primary"></i>
+                        <h2 class="font-semibold">三城市AQI平均值</h2>
+                    </div>
+                    <div class="p-1">
+                        <canvas id="aqiComparisonChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                    </div>
+                    <div class="text-xs text-gray-400 chart-hint flex items-center gap-1">
+                        <i class="fa fa-info-circle text-primary/70"></i>
+                        <span>AQI指数越小，空气质量越好</span>
+                    </div>
+                </div>
+                
+                <!-- PM2.5超标总天数 - 缩小内边距 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-exclamation-circle text-accent"></i>
+                        <h2 class="font-semibold">PM2.5超标总天数</h2>
+                    </div>
+                    <div class="p-3 space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>北京</span>
+                                <span>332天</span>
+                            </div>
+                            <div class="h-1.5 bg-dark/50 rounded-full overflow-hidden">
+                                <div class="h-full bg-primary progress-shine" style="width: 89%"></div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>成都</span>
+                                <span>334天</span>
+                            </div>
+                            <div class="h-1.5 bg-dark/50 rounded-full overflow-hidden">
+                                <div class="h-full bg-secondary progress-shine" style="width: 90%"></div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>重庆</span>
+                                <span>372天</span>
+                            </div>
+                            <div class="h-1.5 bg-dark/50 rounded-full overflow-hidden">
+                                <div class="h-full bg-accent progress-shine" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 空气质量等级说明 - 缩小内边距和字体 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-info-circle text-primary"></i>
+                        <h2 class="font-semibold">空气质量等级说明</h2>
+                    </div>
+                    <div class="p-3 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-success"></div>
+                            <span class="text-xs">优: AQI ≤ 50</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                            <span class="text-xs">良: 51 ≤ AQI ≤ 100</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-accent"></div>
+                            <span class="text-xs">轻度污染: 101 ≤ AQI ≤ 150</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                            <span class="text-xs">中度污染: 151 ≤ AQI ≤ 200</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-danger"></div>
+                            <span class="text-xs">重度污染: AQI > 200</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 中间面板 -->
+            <div class="lg:col-span-5 space-y-4">
+                <!-- 月度AQI趋势图 - 缩小高度 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[220px]">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-area-chart text-primary"></i>
+                        <h2 class="font-semibold">三城市月度AQI趋势</h2>
+                    </div>
+                    <div class="p-1">
+                        <canvas id="monthlyAqiChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 污染物浓度对比图 - 缩小高度 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[220px]">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-bar-chart text-primary"></i>
+                        <h2 class="font-semibold">多污染物浓度平均值对比</h2>
+                    </div>
+                    <div class="p-1">
+                        <canvas id="pollutantChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 达标天污染物浓度对比 - 缩小高度 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[220px]">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-check-circle text-primary"></i>
+                        <h2 class="font-semibold">达标天污染物浓度平均值</h2>
+                    </div>
+                    <div class="p-1">
+                        <canvas id="standardPollutantChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧面板 -->
+            <div class="lg:col-span-4 space-y-4">
+                <!-- 空气质量等级天数统计 - 缩小高度 -->
+                <div class="grid grid-cols-1 gap-4">
+                    <!-- 北京空气质量等级天数 -->
+                    <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[180px]">
+                        <div class="panel-header p-2 flex items-center gap-2">
+                            <i class="fa fa-pie-chart text-primary"></i>
+                            <h2 class="font-semibold">北京空气质量等级天数</h2>
+                        </div>
+                        <div class="p-1">
+                            <canvas id="beijingQualityChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- 成都空气质量等级天数 -->
+                    <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[180px]">
+                        <div class="panel-header p-2 flex items-center gap-2">
+                            <i class="fa fa-pie-chart text-secondary"></i>
+                            <h2 class="font-semibold">成都空气质量等级天数</h2>
+                        </div>
+                        <div class="p-1">
+                            <canvas id="chengduQualityChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- 重庆空气质量等级天数 -->
+                    <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden h-[180px]">
+                        <div class="panel-header p-2 flex items-center gap-2">
+                            <i class="fa fa-pie-chart text-accent"></i>
+                            <h2 class="font-semibold">重庆空气质量等级天数</h2>
+                        </div>
+                        <div class="p-1">
+                            <canvas id="chongqingQualityChart" class="w-full h-[calc(100%-1.2rem)]"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 数据概况 - 缩小内边距和字体 -->
+                <div class="bg-panel rounded-lg border border-primary/30 shadow-panel overflow-hidden">
+                    <div class="panel-header p-2 flex items-center gap-2">
+                        <i class="fa fa-database text-accent"></i>
+                        <h2 class="font-semibold">数据概况</h2>
+                    </div>
+                    <div class="p-3">
+                        <ul class="space-y-2">
+                            <li class="flex justify-between pb-2 border-b border-primary/10 text-sm">
+                                <span class="text-gray-300">监测时间段</span>
+                                <span class="font-medium">2024-09至2025-09</span>
+                            </li>
+                            <li class="flex justify-between pb-2 border-b border-primary/10 text-sm">
+                                <span class="text-gray-300">主要监测污染物</span>
+                                <span class="font-medium">PM2.5, PM10, SO₂, NO₂</span>
+                            </li>
+                            <li class="flex justify-between pb-2 border-b border-primary/10 text-sm">
+                                <span class="text-gray-300">平均AQI最高城市</span>
+                                <span class="font-medium text-secondary">成都 (60.31)</span>
+                            </li>
+                            <li class="flex justify-between text-sm">
+                                <span class="text-gray-300">PM2.5超标天数最多</span>
+                                <span class="font-medium text-accent">重庆 (372天)</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        // 空气质量数据 - 保持不变
+        const airQualityData = {
+            "三城市月度AQI": {
+                "北京": {
+                    "2024-09": 33.53, "2024-10": 62.81, "2024-11": 64.30, "2024-12": 36.61,
+                    "2025-01": 52.16, "2025-02": 52.18, "2025-03": 73.81, "2025-04": 59.80,
+                    "2025-05": 75.71, "2025-06": 89.40, "2025-07": 60.29, "2025-08": 53.19, "2025-09": 50.46
+                },
+                "成都": {
+                    "2024-09": 44.67, "2024-10": 37.90, "2024-11": 40.27, "2024-12": 69.90,
+                    "2025-01": 90.68, "2025-02": 45.61, "2025-03": 57.45, "2025-04": 72.77,
+                    "2025-05": 73.61, "2025-06": 74.03, "2025-08": 67.55, "2025-09": 43.79
+                },
+                "重庆": {
+                    "2024-09": 39.80, "2024-10": 47.26, "2024-11": 45.00, "2024-12": 80.32,
+                    "2025-01": 100.48, "2025-02": 50.21, "2025-03": 52.48, "2025-04": 73.63,
+                    "2025-05": 58.42, "2025-06": 53.10, "2025-07": 52.55, "2025-08": 49.45, "2025-09": 39.50
+                }
+            },
+            "三城市多污染物浓度平均值": {
+                "北京": {"PM2.5": 160.57, "PM10": 26.60, "SO₂": 49.23, "NO₂": 21.24},
+                "成都": {"PM2.5": 174.24, "PM10": 31.65, "SO₂": 52.71, "NO₂": 25.42},
+                "重庆": {"PM2.5": 163.65, "PM10": 32.36, "SO₂": 49.86, "NO₂": 23.34}
+            },
+            "三城市达标天污染物浓度平均值": {
+                "北京": {"PM2.5": 144.59, "PM10": 21.75, "SO₂": 42.53, "NO₂": 20.21},
+                "成都": {"PM2.5": 163.16, "PM10": 28.13, "SO₂": 46.95, "NO₂": 24.60},
+                "重庆": {"PM2.5": 154.12, "PM10": 27.52, "SO₂": 42.73, "NO₂": 22.21}
+            },
+            "各城市空气质量等级天数": {
+                "北京": {"中度污染": 2, "优": 189, "良": 162, "轻度污染": 34, "重度污染": 2},
+                "成都": {"中度污染": 4, "优": 160, "良": 167, "轻度污染": 25, "重度污染": 2},
+                "重庆": {"中度污染": 5, "优": 197, "良": 162, "轻度污染": 23, "重度污染": 2}
+            },
+            "三城市AQI平均值": {
+                "北京": 58.96,
+                "成都": 60.31,
+                "重庆": 57.51
+            }
+        };
+        
+        // 设置当前时间
+        function updateDateTime() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+            const timeStr = now.toLocaleTimeString('zh-CN');
+            document.getElementById('current-date').textContent = dateStr;
+            document.getElementById('update-time').textContent = `最后更新: ${timeStr}`;
+        }
+        
+        // 初始化更新时间并定时刷新
+        updateDateTime();
+        setInterval(updateDateTime, 60000);
+        
+        // 图表通用配置 - 缩小字体和边距
+        const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        font: {
+                            size: 9 // 缩小图例字体
+                        },
+                        boxWidth: 10, // 缩小图例颜色块
+                        padding: 10 // 缩小图例内边距
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 25, 47, 0.9)',
+                    borderColor: 'rgba(0, 191, 255, 0.4)',
+                    borderWidth: 1,
+                    titleColor: 'rgba(255, 255, 255, 0.9)',
+                    bodyColor: 'rgba(255, 255, 255, 0.7)',
+                    padding: 8, // 缩小提示框内边距
+                    displayColors: true,
+                    titleFont: { size: 10 }, // 缩小提示框标题字体
+                    bodyFont: { size: 9 }, // 缩小提示框内容字体
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.raw}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8 // 缩小X轴刻度字体
+                        },
+                        padding: 4 // 缩小X轴刻度内边距
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        font: {
+                            size: 8 // 缩小Y轴刻度字体
+                        },
+                        padding: 4 // 缩小Y轴刻度内边距
+                    },
+                    title: {
+                        display: true,
+                        text: 'AQI指数',
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        font: {
+                            size: 9 // 缩小Y轴标题字体
+                        },
+                        padding: { top: 5, bottom: 5 } // 缩小Y轴标题边距
+                    }
+                },
+                r: {
+                    // 雷达图特殊配置 - 缩小字体
+                    angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    pointLabels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        font: { size: 8 } // 缩小雷达图标签字体
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        backdropColor: 'transparent',
+                        font: { size: 7 } // 缩小雷达图刻度字体
+                    }
+                }
+            },
+            animation: {
+                duration: 1500,
+                easing: 'easeOutQuart'
+            },
+            layout: {
+                padding: {
+                    top: 5,
+                    right: 5,
+                    bottom: 5,
+                    left: 5 // 缩小图表整体内边距
+                }
+            }
+        };
+        
+        // 绘制三城市AQI平均值柱状图
+        function drawAqiComparisonChart() {
+            const ctx = document.getElementById('aqiComparisonChart').getContext('2d');
+            const data = airQualityData["三城市AQI平均值"];
+            const cities = Object.keys(data);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: cities,
+                    datasets: [{
+                        label: 'AQI平均值',
+                        data: Object.values(data),
+                        backgroundColor: [
+                            'rgba(0, 191, 255, 0.7)',
+                            'rgba(30, 144, 255, 0.7)',
+                            'rgba(0, 206, 209, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(0, 191, 255, 1)',
+                            'rgba(30, 144, 255, 1)',
+                            'rgba(0, 206, 209, 1)'
+                        ],
+                        borderWidth: 1,
+                        borderRadius: 3, // 缩小柱形圆角
+                        barPercentage: 0.6, // 缩小柱形宽度比例
+                        categoryPercentage: 0.7 // 缩小类别间距比例
+                    }]
+                },
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        legend: { display: false }
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: {
+                            ...chartDefaults.scales.y,
+                            beginAtZero: true,
+                            title: { text: 'AQI指数' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 绘制月度AQI趋势图
+        function drawMonthlyAqiChart() {
+            const ctx = document.getElementById('monthlyAqiChart').getContext('2d');
+            const data = airQualityData["三城市月度AQI"];
+            const months = Object.keys(data["北京"]);
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: '北京',
+                            data: Object.values(data["北京"]),
+                            borderColor: '#00BFFF',
+                            backgroundColor: 'rgba(0, 191, 255, 0.1)',
+                            borderWidth: 1.5, // 缩小线条宽度
+                            tension: 0.4,
+                            fill: true,
+                            pointBackgroundColor: '#00BFFF',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3, // 缩小数据点大小
+                            pointHoverRadius: 4, // 缩小hover数据点大小
+                            pointBorderWidth: 1 // 缩小数据点边框宽度
+                        },
+                        {
+                            label: '成都',
+                            data: Object.values(data["成都"]),
+                            borderColor: '#1E90FF',
+                            backgroundColor: 'rgba(30, 144, 255, 0.1)',
+                            borderWidth: 1.5,
+                            tension: 0.4,
+                            fill: true,
+                            pointBackgroundColor: '#1E90FF',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3,
+                            pointHoverRadius: 4,
+                            pointBorderWidth: 1
+                        },
+                        {
+                            label: '重庆',
+                            data: Object.values(data["重庆"]),
+                            borderColor: '#00CED1',
+                            backgroundColor: 'rgba(0, 206, 209, 0.1)',
+                            borderWidth: 1.5,
+                            tension: 0.4,
+                            fill: true,
+                            pointBackgroundColor: '#00CED1',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3,
+                            pointHoverRadius: 4,
+                            pointBorderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: { ...chartDefaults.scales.y, title: { text: 'AQI指数' } }
+                    }
+                }
+            });
+        }
+        
+        // 绘制污染物浓度对比图
+        function drawPollutantChart() {
+            const ctx = document.getElementById('pollutantChart').getContext('2d');
+            const data = airQualityData["三城市多污染物浓度平均值"];
+            const pollutants = Object.keys(data["北京"]);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: pollutants,
+                    datasets: [
+                        {
+                            label: '北京',
+                            data: Object.values(data["北京"]),
+                            backgroundColor: 'rgba(0, 191, 255, 0.7)',
+                            borderColor: 'rgba(0, 191, 255, 1)',
+                            borderWidth: 1,
+                            borderRadius: 3,
+                            barPercentage: 0.5, // 缩小柱形宽度
+                            categoryPercentage: 0.6 // 缩小类别间距
+                        },
+                        {
+                            label: '成都',
+                            data: Object.values(data["成都"]),
+                            backgroundColor: 'rgba(30, 144, 255, 0.7)',
+                            borderColor: 'rgba(30, 144, 255, 1)',
+                            borderWidth: 1,
+                            borderRadius: 3,
+                            barPercentage: 0.5,
+                            categoryPercentage: 0.6
+                        },
+                        {
+                            label: '重庆',
+                            data: Object.values(data["重庆"]),
+                            backgroundColor: 'rgba(0, 206, 209, 0.7)',
+                            borderColor: 'rgba(0, 206, 209, 1)',
+                            borderWidth: 1,
+                            borderRadius: 3,
+                            barPercentage: 0.5,
+                            categoryPercentage: 0.6
+                        }
+                    ]
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: { ...chartDefaults.scales.y, title: { text: '浓度值' } }
+                    }
+                }
+            });
+        }
+        
+        // 绘制达标天污染物浓度雷达图
+        function drawStandardPollutantChart() {
+            const ctx = document.getElementById('standardPollutantChart').getContext('2d');
+            const data = airQualityData["三城市达标天污染物浓度平均值"];
+            const pollutants = Object.keys(data["北京"]);
+            
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: pollutants,
+                    datasets: [
+                        {
+                            label: '北京',
+                            data: Object.values(data["北京"]),
+                            backgroundColor: 'rgba(0, 191, 255, 0.2)',
+                            borderColor: 'rgba(0, 191, 255, 1)',
+                            borderWidth: 1.5, // 缩小线条宽度
+                            pointBackgroundColor: '#00BFFF',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3, // 缩小数据点
+                            pointHoverRadius: 4
+                        },
+                        {
+                            label: '成都',
+                            data: Object.values(data["成都"]),
+                            backgroundColor: 'rgba(30, 144, 255, 0.2)',
+                            borderColor: 'rgba(30, 144, 255, 1)',
+                            borderWidth: 1.5,
+                            pointBackgroundColor: '#1E90FF',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3,
+                            pointHoverRadius: 4
+                        },
+                        {
+                            label: '重庆',
+                            data: Object.values(data["重庆"]),
+                            backgroundColor: 'rgba(0, 206, 209, 0.2)',
+                            borderColor: 'rgba(0, 206, 209, 1)',
+                            borderWidth: 1.5,
+                            pointBackgroundColor: '#00CED1',
+                            pointBorderColor: '#fff',
+                            pointRadius: 3,
+                            pointHoverRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: { ...chartDefaults.scales }
+                }
+            });
+        }
+        
+        // 绘制空气质量等级饼图
+        function drawQualityPieChart(canvasId, data, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // 质量等级颜色映射
+            const qualityColors = {
+                "优": '#32CD32',
+                "良": '#00BFFF',
+                "轻度污染": '#00CED1',
+                "中度污染": '#1E90FF',
+                "重度污染": '#FF6347'
+            };
+            
+            // 准备数据
+            const labels = Object.keys(data);
+            const values = Object.values(data);
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: labels.map(label => qualityColors[label]),
+                        borderColor: '#05101F',
+                        borderWidth: 1.5, // 缩小边框宽度
+                        hoverOffset: 4 // 缩小hover偏移
+                    }]
+                },
+                options: {
+                    ...chartDefaults,
+                    cutout: '65%', // 增大内环比例，缩小饼图整体视觉大小
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                ...chartDefaults.plugins.legend.labels,
+                                padding: 8, // 缩小图例内边距
+                                font: { size: 8 } // 缩小图例字体
+                            }
+                        },
+                        tooltip: {
+                            ...chartDefaults.plugins.tooltip,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value}天 (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 初始化所有图表
+        function initCharts() {
+            setTimeout(() => drawAqiComparisonChart(), 300);
+            setTimeout(() => drawMonthlyAqiChart(), 600);
+            setTimeout(() => drawPollutantChart(), 900);
+            setTimeout(() => drawStandardPollutantChart(), 1200);
+            setTimeout(() => drawQualityPieChart('beijingQualityChart', airQualityData["各城市空气质量等级天数"]["北京"], '#00BFFF'), 1500);
+            setTimeout(() => drawQualityPieChart('chengduQualityChart', airQualityData["各城市空气质量等级天数"]["成都"], '#1E90FF'), 1800);
+            setTimeout(() => drawQualityPieChart('chongqingQualityChart', airQualityData["各城市空气质量等级天数"]["重庆"], '#00CED1'), 2100);
+        }
+        
+        // 窗口大小变化时重绘图表
+        window.addEventListener('resize', initCharts);
+        
+        // 页面加载完成后初始化图表
+        window.addEventListener('load', initCharts);
+    </script>
+</body>
+</html>
